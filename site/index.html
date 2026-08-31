@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tennis Court Alerts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.4; }
+  h1 { font-size: 1.4rem; }
+  fieldset { border: 1px solid #8883; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+  legend { font-weight: 600; padding: 0 .4rem; }
+  label { display: block; margin: .6rem 0 .2rem; font-size: .9rem; }
+  input[type=text], input[type=time] { width: 100%; padding: .5rem; font-size: 1rem; box-sizing: border-box; }
+  .days { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .days label { display: flex; align-items: center; gap: .3rem; font-size: .85rem; margin: 0; }
+  .quick-days { margin: .4rem 0; display: flex; gap: .5rem; }
+  .quick-days button { font-size: .8rem; padding: .2rem .6rem; }
+  .time-range { display: flex; gap: 1rem; }
+  .time-range > div { flex: 1; }
+  button.primary { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #8883; }
+  .del-btn { cursor: pointer; color: #c0392b; background: none; border: none; font-size: .9rem; }
+  #status { font-size: .85rem; color: #888; min-height: 1.2em; }
+</style>
+</head>
+<body>
+
+<h1>Tennis court alerts</h1>
+<p>Pick a court, choose when you'd be told about new availability. Checked every ~15 minutes; you'll get a Telegram message when a matching slot opens up.</p>
+
+<fieldset>
+  <legend>Add an alert</legend>
+
+  <label for="venue-input">Court</label>
+  <input type="text" id="venue-input" list="venue-list" placeholder="Start typing a court name...">
+  <datalist id="venue-list"></datalist>
+
+  <label>Days</label>
+  <div class="quick-days">
+    <button type="button" data-preset="weekdays">Weekdays</button>
+    <button type="button" data-preset="weekends">Weekends</button>
+    <button type="button" data-preset="all">Every day</button>
+    <button type="button" data-preset="none">Clear</button>
+  </div>
+  <div class="days" id="days-checkboxes"></div>
+
+  <div class="time-range">
+    <div>
+      <label for="start-time">From</label>
+      <input type="time" id="start-time" value="17:00">
+    </div>
+    <div>
+      <label for="end-time">To</label>
+      <input type="time" id="end-time" value="19:00">
+    </div>
+  </div>
+
+  <button class="primary" id="add-btn">Add alert</button>
+  <div id="status"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Your alerts</legend>
+  <table id="rules-table">
+    <thead><tr><th>Court</th><th>Days</th><th>Time</th><th></th></tr></thead>
+    <tbody id="rules-body"><tr><td colspan="4">Loading...</td></tr></tbody>
+  </table>
+</fieldset>
+
+<script src="config.js"></script>
+<script>
+const DAY_ORDER = ["mon","tue","wed","thu","fri","sat","sun"];
+const DAY_LABEL = {mon:"Mon",tue:"Tue",wed:"Wed",thu:"Thu",fri:"Fri",sat:"Sat",sun:"Sun"};
+
+const daysBox = document.getElementById("days-checkboxes");
+DAY_ORDER.forEach(d => {
+  const label = document.createElement("label");
+  label.innerHTML = `<input type="checkbox" value="${d}"> ${DAY_LABEL[d]}`;
+  daysBox.appendChild(label);
+});
+
+document.querySelectorAll(".quick-days button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const preset = btn.dataset.preset;
+    const checks = daysBox.querySelectorAll("input[type=checkbox]");
+    checks.forEach(c => {
+      if (preset === "all") c.checked = true;
+      else if (preset === "none") c.checked = false;
+      else if (preset === "weekdays") c.checked = !["sat","sun"].includes(c.value);
+      else if (preset === "weekends") c.checked = ["sat","sun"].includes(c.value);
+    });
+  });
+});
+
+let venuesByName = {};
+
+async function loadVenues() {
+  const res = await fetch("venues_directory.json");
+  const venues = await res.json();
+  const list = document.getElementById("venue-list");
+  venues.forEach(v => {
+    venuesByName[v.name] = v;
+    const opt = document.createElement("option");
+    opt.value = v.name;
+    list.appendChild(opt);
+  });
+}
+
+function sbHeaders() {
+  return {
+    "apikey": window.SUPABASE_ANON_KEY,
+    "Authorization": `Bearer ${window.SUPABASE_ANON_KEY}`,
+    "Content-Type": "application/json",
+  };
+}
+
+async function loadRules() {
+  const res = await fetch(`${window.SUPABASE_URL}/rest/v1/alert_rules?select=*&order=created_at.desc`, {
+    headers: sbHeaders(),
+  });
+  const rules = await res.json();
+  const body = document.getElementById("rules-body");
+  body.innerHTML = "";
+  if (!rules.length) {
+    body.innerHTML = `<tr><td colspan="4">No alerts yet.</td></tr>`;
+    return;
+  }
+  rules.forEach(r => {
+    const tr = document.createElement("tr");
+    const dayStr = DAY_ORDER.filter(d => r.days.includes(d)).map(d => DAY_LABEL[d]).join(", ");
+    tr.innerHTML = `
+      <td>${r.venue_name}</td>
+      <td>${dayStr}</td>
+      <td>${r.start_time}–${r.end_time}</td>
+      <td><button class="del-btn" data-id="${r.id}">Remove</button></td>
+    `;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll(".del-btn").forEach(btn => {
+    btn.addEventListener("click", () => deleteRule(btn.dataset.id));
+  });
+}
+
+async function deleteRule(id) {
+  await fetch(`${window.SUPABASE_URL}/rest/v1/alert_rules?id=eq.${id}`, {
+    method: "DELETE",
+    headers: sbHeaders(),
+  });
+  loadRules();
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.style.color = isError ? "#c0392b" : "#888";
+}
+
+document.getElementById("add-btn").addEventListener("click", async () => {
+  const venueName = document.getElementById("venue-input").value.trim();
+  const venue = venuesByName[venueName];
+  if (!venue) {
+    setStatus("Pick a court from the suggestions list.", true);
+    return;
+  }
+  const days = Array.from(daysBox.querySelectorAll("input:checked")).map(c => c.value);
+  if (!days.length) {
+    setStatus("Select at least one day.", true);
+    return;
+  }
+  const startTime = document.getElementById("start-time").value;
+  const endTime = document.getElementById("end-time").value;
+  if (!startTime || !endTime || startTime >= endTime) {
+    setStatus("Pick a valid time range.", true);
+    return;
+  }
+
+  setStatus("Saving...");
+  const res = await fetch(`${window.SUPABASE_URL}/rest/v1/alert_rules`, {
+    method: "POST",
+    headers: sbHeaders(),
+    body: JSON.stringify([{
+      venue_id: venue.id,
+      venue_name: venue.name,
+      days,
+      start_time: startTime,
+      end_time: endTime,
+    }]),
+  });
+  if (res.ok) {
+    setStatus("Alert added.");
+    document.getElementById("venue-input").value = "";
+    loadRules();
+  } else {
+    setStatus("Failed to save - check config.js has your Supabase URL/key.", true);
+  }
+});
+
+loadVenues();
+loadRules();
+</script>
+</body>
+</html>
