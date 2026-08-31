@@ -9,7 +9,7 @@ to run continuously.
 
 ## How it fits together
 
-- **[site/](site/)** — static preferences page (`index.html` + `config.js`).
+- **[docs/](docs/)** — static preferences page (`index.html` + `config.js`).
   Lets you search ~600 LTA venues (from `venues_directory.json`), pick days
   and a time window, and saves the rule to a Supabase table. Host it free on
   GitHub Pages.
@@ -39,7 +39,7 @@ to run continuously.
    to sign up yourself).
 2. In the SQL Editor, run the contents of [supabase_schema.sql](supabase_schema.sql).
 3. Go to Settings -> API and copy the **Project URL** and **anon public key**.
-4. Paste them into [site/config.js](site/config.js).
+4. Paste them into [docs/config.js](docs/config.js).
 
 ### 2. Telegram bot (sends your alerts)
 
@@ -52,9 +52,9 @@ to run continuously.
 ### 3. Deploy
 
 1. Push this folder to a new GitHub repo (public or private).
-2. Enable **GitHub Pages** for the repo, serving from the `site/` folder (or
-   `/docs` if you rename it) — this gives you the URL where you'll manage
-   your alerts.
+2. Enable **GitHub Pages** for the repo (Settings -> Pages), serving from the
+   `main` branch, `/docs` folder — this gives you the URL where you'll
+   manage your alerts.
 3. In the repo's Settings -> Secrets and variables -> Actions, add:
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_CHAT_ID`
@@ -78,7 +78,7 @@ console instead of sending.
 To preview the site locally:
 
 ```bash
-cd site && python3 -m http.server 8765
+cd docs && python3 -m http.server 8765
 ```
 
 ## Notes / limitations
